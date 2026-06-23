@@ -678,18 +678,18 @@ textarea:focus-visible {
 @media (max-width: 900px) {
     html,
     body {
-        height: auto;
-        min-height: 100%;
+        height: 100%;
         overflow-x: hidden;
-        overflow-y: auto;
+        overflow-y: hidden;
     }
 
     .app {
         grid-template-columns: 1fr;
-        grid-template-rows: minmax(420px, 56svh) auto;
-        height: auto;
-        min-height: 100vh;
-        min-height: 100dvh;
+        grid-template-rows: minmax(420px, 56svh) minmax(0, 1fr);
+        height: 100vh;
+        height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
     }
 
     .stage {
@@ -697,8 +697,11 @@ textarea:focus-visible {
     }
 
     .panel {
-        height: auto;
-        max-height: none;
+        min-height: 0;
+        height: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
         border-top: 1px solid var(--line);
         border-left: 0;
         box-shadow: none;
@@ -707,7 +710,7 @@ textarea:focus-visible {
 
 @media (max-width: 720px) {
     .app {
-        grid-template-rows: minmax(390px, 54svh) auto;
+        grid-template-rows: minmax(390px, 54svh) minmax(0, 1fr);
     }
 
     .hud {
@@ -799,7 +802,7 @@ textarea:focus-visible {
 
 @media (max-width: 420px) {
     .app {
-        grid-template-rows: minmax(360px, 52svh) auto;
+        grid-template-rows: minmax(360px, 52svh) minmax(0, 1fr);
     }
 
     .stage {
@@ -866,7 +869,7 @@ textarea:focus-visible {
 
 @media (max-width: 900px) and (max-height: 520px) {
     .app {
-        grid-template-rows: minmax(280px, 48svh) auto;
+        grid-template-rows: minmax(280px, 48svh) minmax(0, 1fr);
     }
 
     .stage {
