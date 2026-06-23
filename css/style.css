@@ -28,6 +28,37 @@ body {
     background: var(--bg);
 }
 
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #17191d #eef2f7;
+}
+
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background:
+        repeating-linear-gradient(
+            90deg,
+            #eef2f7 0,
+            #eef2f7 3px,
+            #f8fafc 3px,
+            #f8fafc 7px
+        );
+}
+
+::-webkit-scrollbar-thumb {
+    border: 3px solid #eef2f7;
+    border-radius: 0;
+    background: #17191d;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #3b4048;
+}
+
 button,
 input,
 textarea {
@@ -280,11 +311,6 @@ h2 {
     outline: none;
 }
 
-.field input[readonly] {
-    background: #eef2f7;
-    color: var(--muted);
-}
-
 .field input[type="text"] {
     height: 38px;
     padding: 0 11px;
@@ -344,13 +370,15 @@ h2 {
 
 .task-item {
     display: grid;
-    grid-template-columns: 22px minmax(0, 1fr) 34px;
+    grid-template-columns: 34px minmax(0, 1fr) 42px 34px;
     gap: 8px;
-    align-items: start;
+    align-items: center;
     padding: 8px;
     border: 1px solid var(--line);
     border-radius: 8px;
     background: #f9fbfd;
+    cursor: default;
+    transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease, opacity 140ms ease;
 }
 
 .task-item.is-selected {
@@ -358,10 +386,28 @@ h2 {
     box-shadow: 0 0 0 3px rgba(0, 106, 220, 0.08);
 }
 
+.task-item.is-dragging {
+    opacity: 0.72;
+    transform: scale(0.985);
+    border-color: rgba(25, 143, 101, 0.55);
+    box-shadow: 0 10px 24px rgba(23, 25, 29, 0.14);
+    cursor: grabbing;
+}
+
+.task-item.is-drop-target {
+    border-color: rgba(25, 143, 101, 0.62);
+    box-shadow: inset 0 0 0 2px rgba(25, 143, 101, 0.16);
+}
+
 .task-check {
-    width: 18px;
-    height: 18px;
-    margin-top: 7px;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 32px;
+    margin: 0;
+    border: 1px solid rgba(25, 143, 101, 0.22);
+    border-radius: 8px;
+    background: rgba(25, 143, 101, 0.08);
     accent-color: var(--success);
 }
 
@@ -389,30 +435,69 @@ h2 {
     color: var(--ink);
 }
 
-.task-weight {
+.task-order {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.task-item input[type="text"] {
+.task-item textarea {
     min-width: 0;
-    height: 32px;
+    min-height: 34px;
+    max-height: 140px;
+    padding: 6px 0;
     border: 0;
     background: transparent;
     color: var(--ink);
     outline: none;
+    resize: none;
+    line-height: 1.35;
+    overflow-y: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    cursor: text;
+}
+
+.task-item textarea[readonly] {
+    cursor: default;
+}
+
+.edit-btn,
+.mini-btn {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 32px;
+    min-height: 32px;
+    border-radius: 8px;
+    line-height: 1;
+}
+
+.edit-btn {
+    border: 1px solid rgba(23, 25, 29, 0.12);
+    background: #eef2f7;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.edit-btn.is-editing {
+    border-color: rgba(25, 143, 101, 0.28);
+    background: rgba(25, 143, 101, 0.1);
+    color: var(--success);
 }
 
 .mini-btn {
-    width: 34px;
-    height: 32px;
-    min-height: 32px;
     background: rgba(192, 54, 44, 0.09);
     color: var(--danger);
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 900;
+}
+
+.task-item .edit-btn:hover,
+.task-item .mini-btn:hover {
+    transform: none;
 }
 
 .empty-state {

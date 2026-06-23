@@ -42,7 +42,7 @@
 
                 <label class="field">
                     <span>라인명</span>
-                    <input id="barTitleInput" type="text" readonly autocomplete="off">
+                    <input id="barTitleInput" type="text" maxlength="32" autocomplete="off">
                 </label>
 
                 <div class="move-row" aria-label="선 위치 변경">
@@ -79,7 +79,7 @@
 
                 <label class="field">
                     <span>내용</span>
-                    <textarea id="planTextInput" rows="3" maxlength="80" placeholder="계획을 입력하세요"></textarea>
+                    <textarea id="planTextInput" rows="3" maxlength="160" placeholder="계획을 입력하세요"></textarea>
                 </label>
 
                 <button id="addTaskBtn" class="primary-btn" type="button">계획 추가</button>

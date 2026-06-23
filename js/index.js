@@ -30,7 +30,6 @@
     const MAX_ZOOM = 3.4;
     const DEFAULT_COLOR = "#111111";
     const STORAGE_KEY = "id-in-lines-state-v1";
-    const WAVE_HIGHLIGHT = "rgba(255, 255, 255, 0.38)";
 
     const state = {
         bars: [],
@@ -80,18 +79,11 @@
         return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
-    function characterCount(text) {
-        return Array.from(text.trim()).length;
-    }
-
-    function taskWeight(task) {
-        return clamp(characterCount(task.text), 1, 80);
-    }
-
     function makeBar(width, height, gapAfter) {
         return {
             id: nextId("bar"),
             title: "",
+            customTitle: false,
             x: 0,
             width,
             height,
@@ -118,6 +110,8 @@
     function serializeBar(bar) {
         return {
             id: bar.id,
+            title: bar.title,
+            customTitle: bar.customTitle,
             width: bar.width,
             height: bar.height,
             gapAfter: bar.gapAfter,
@@ -168,7 +162,8 @@
 
             state.bars = saved.bars.map((bar) => ({
                 id: typeof bar.id === "string" ? bar.id : nextId("bar"),
-                title: "",
+                title: typeof bar.title === "string" ? bar.title : "",
+                customTitle: Boolean(bar.customTitle),
                 x: 0,
                 width: clamp(Number(bar.width) || 12, 4, 34),
                 height: clamp(Number(bar.height) || 260, 160, 460),
@@ -185,10 +180,8 @@
             }));
 
             state.idSeed = Math.max(Number(saved.idSeed) || 0, state.idSeed, getHighestSavedId(state.bars));
-            state.selectedBarId = state.bars.some((bar) => bar.id === saved.selectedBarId)
-                ? saved.selectedBarId
-                : state.bars[0].id;
-            state.selectedTaskId = saved.selectedTaskId || null;
+            state.selectedBarId = null;
+            state.selectedTaskId = null;
             state.revealed = Boolean(saved.revealed);
             renumberBars();
             layoutBars();
@@ -201,7 +194,9 @@
 
     function renumberBars() {
         state.bars.forEach((bar, index) => {
-            bar.title = `Line${String(index + 1).padStart(2, "0")}`;
+            if (!bar.customTitle) {
+                bar.title = `Line${String(index + 1).padStart(2, "0")}`;
+            }
         });
     }
 
@@ -235,21 +230,17 @@
     function getTaskTotals(bar) {
         const totalCount = bar.tasks.length;
         const doneCount = bar.tasks.filter((task) => task.done).length;
-        const totalWeight = bar.tasks.reduce((sum, task) => sum + taskWeight(task), 0);
-        const doneWeight = bar.tasks.reduce((sum, task) => sum + (task.done ? taskWeight(task) : 0), 0);
 
         return {
             totalCount,
             doneCount,
-            totalWeight,
-            doneWeight,
         };
     }
 
     function getBarProgress(bar) {
         const totals = getTaskTotals(bar);
-        if (totals.totalWeight === 0) return 0;
-        return clamp(totals.doneWeight / totals.totalWeight, 0, 1);
+        if (totals.totalCount === 0) return 0;
+        return clamp(totals.doneCount / totals.totalCount, 0, 1);
     }
 
     function getGaugeGeometry(bar) {
@@ -446,18 +437,6 @@
         ctx.closePath();
         ctx.fill();
 
-        if (fillHeight > 8 / state.camera.zoom) {
-            ctx.strokeStyle = WAVE_HIGHLIGHT;
-            ctx.lineWidth = Math.max(1, 1.4 / state.camera.zoom);
-            ctx.beginPath();
-            ctx.moveTo(gauge.left, firstWaveY);
-            for (let x = gauge.left + step; x < gauge.left + gauge.width; x += step) {
-                ctx.lineTo(x, waveYAt(x));
-            }
-            ctx.lineTo(gauge.left + gauge.width, waveYAt(gauge.left + gauge.width));
-            ctx.stroke();
-        }
-
         ctx.restore();
         return progress < 1 || progress > 0;
     }
@@ -497,7 +476,7 @@
                 );
             }
 
-            if (bar.tasks.length > 0) {
+            if (state.revealed && bar.tasks.length > 0) {
                 ctx.fillStyle = "rgba(23, 25, 29, 0.56)";
                 ctx.font = `700 ${10 / state.camera.zoom}px sans-serif`;
                 ctx.textAlign = "center";
@@ -677,6 +656,11 @@
         }, 1800);
     }
 
+    function autoResizeTextarea(textarea) {
+        textarea.style.height = "auto";
+        textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+
     function updateBrandStatus(bar) {
         if (!bar) {
             brandStatus.textContent = "ID-in-Lines";
@@ -688,8 +672,8 @@
 
         const totals = getTaskTotals(bar);
         const tone = pastelTone(bar.color);
-        brandStatus.textContent = `${bar.title} - ${totals.doneCount}/${totals.totalCount}`;
-        brandStatus.style.color = tone.text;
+        brandStatus.textContent = `${bar.title} · ${totals.doneCount}/${totals.totalCount}`;
+        brandStatus.style.color = "#17191d";
         brandStatus.style.borderColor = tone.border;
         brandStatus.style.background = tone.background;
     }
@@ -698,6 +682,7 @@
         const bar = getSelectedBar();
         const hasBar = Boolean(bar);
         const controls = [
+            barTitleInput,
             barWidthInput,
             barHeightInput,
             barColorInput,
@@ -755,9 +740,10 @@
             return;
         }
 
-        bar.tasks.forEach((task) => {
+        bar.tasks.forEach((task, index) => {
             const item = document.createElement("div");
             item.className = "task-item";
+            item.draggable = true;
             item.dataset.taskId = task.id;
             if (task.id === state.selectedTaskId) {
                 item.classList.add("is-selected");
@@ -779,22 +765,30 @@
             lineBadge.className = "line-badge";
             lineBadge.textContent = bar.title;
 
-            const weight = document.createElement("span");
-            weight.className = "task-weight";
-            weight.textContent = `size ${taskWeight(task)}`;
+            const order = document.createElement("span");
+            order.className = "task-order";
+            order.textContent = `No. ${String(index + 1).padStart(2, "0")}`;
 
-            const input = document.createElement("input");
-            input.type = "text";
-            input.maxLength = 80;
+            const input = document.createElement("textarea");
+            input.rows = 1;
+            input.maxLength = 160;
             input.value = task.text;
+            input.readOnly = true;
             input.setAttribute("aria-label", "계획 수정");
+
+            const editBtn = document.createElement("button");
+            editBtn.className = "edit-btn";
+            editBtn.type = "button";
+            editBtn.title = "계획 수정";
+            editBtn.setAttribute("aria-label", "계획 수정");
+            editBtn.textContent = "수정";
 
             const deleteBtn = document.createElement("button");
             deleteBtn.className = "mini-btn";
             deleteBtn.type = "button";
             deleteBtn.title = "계획 삭제";
             deleteBtn.setAttribute("aria-label", "계획 삭제");
-            deleteBtn.textContent = "x";
+            deleteBtn.textContent = "×";
 
             checkbox.addEventListener("change", () => {
                 task.done = checkbox.checked;
@@ -806,6 +800,11 @@
             });
 
             input.addEventListener("focus", () => {
+                if (input.readOnly) {
+                    input.blur();
+                    return;
+                }
+
                 state.selectedTaskId = task.id;
                 highlightTaskItem(task.id);
                 requestRender();
@@ -814,14 +813,78 @@
 
             input.addEventListener("input", () => {
                 task.text = input.value;
-                weight.textContent = `size ${taskWeight(task)}`;
+                autoResizeTextarea(input);
                 updatePlanSummary(bar);
                 requestRender();
                 saveState();
             });
 
+            input.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    input.readOnly = true;
+                    editBtn.classList.remove("is-editing");
+                    editBtn.textContent = "수정";
+                    input.blur();
+                }
+            });
+
+            editBtn.addEventListener("click", () => {
+                const nextEditing = input.readOnly;
+                input.readOnly = !nextEditing;
+                editBtn.classList.toggle("is-editing", nextEditing);
+                editBtn.textContent = nextEditing ? "완료" : "수정";
+
+                if (nextEditing) {
+                    state.selectedTaskId = task.id;
+                    highlightTaskItem(task.id);
+                    input.focus();
+                    input.setSelectionRange(input.value.length, input.value.length);
+                } else {
+                    saveState();
+                }
+            });
+
             deleteBtn.addEventListener("click", () => {
                 deleteTask(task.id);
+            });
+
+            item.addEventListener("dragstart", (event) => {
+                if (event.target.closest("button, input, textarea")) {
+                    event.preventDefault();
+                    return;
+                }
+
+                state.selectedTaskId = task.id;
+                item.classList.add("is-dragging");
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", task.id);
+                highlightTaskItem(task.id);
+            });
+
+            item.addEventListener("dragend", () => {
+                item.classList.remove("is-dragging");
+                taskList.querySelectorAll(".task-item").forEach((taskItem) => {
+                    taskItem.classList.remove("is-drop-target");
+                });
+            });
+
+            item.addEventListener("dragover", (event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                taskList.querySelectorAll(".task-item").forEach((taskItem) => {
+                    taskItem.classList.toggle("is-drop-target", taskItem === item);
+                });
+            });
+
+            item.addEventListener("dragleave", () => {
+                item.classList.remove("is-drop-target");
+            });
+
+            item.addEventListener("drop", (event) => {
+                event.preventDefault();
+                const draggedTaskId = event.dataTransfer.getData("text/plain");
+                reorderTask(bar, draggedTaskId, task.id);
             });
 
             item.addEventListener("click", () => {
@@ -831,10 +894,11 @@
                 saveState();
             });
 
-            meta.append(lineBadge, weight);
+            meta.append(lineBadge, order);
             body.append(meta, input);
-            item.append(checkbox, body, deleteBtn);
+            item.append(checkbox, body, editBtn, deleteBtn);
             taskList.appendChild(item);
+            autoResizeTextarea(input);
         });
     }
 
@@ -956,6 +1020,21 @@
         showToast("계획이 삭제되었습니다.");
     }
 
+    function reorderTask(bar, draggedTaskId, targetTaskId) {
+        if (!bar || !draggedTaskId || !targetTaskId || draggedTaskId === targetTaskId) return;
+
+        const fromIndex = bar.tasks.findIndex((task) => task.id === draggedTaskId);
+        const toIndex = bar.tasks.findIndex((task) => task.id === targetTaskId);
+        if (fromIndex < 0 || toIndex < 0) return;
+
+        const [draggedTask] = bar.tasks.splice(fromIndex, 1);
+        bar.tasks.splice(toIndex, 0, draggedTask);
+        state.selectedTaskId = draggedTask.id;
+        renderTaskList(bar);
+        requestRender();
+        saveState();
+    }
+
     function updateSelectedBarSize(property, value) {
         const bar = getSelectedBar();
         if (!bar) return;
@@ -975,6 +1054,20 @@
         bar.color = value;
         updateBrandStatus(bar);
         requestRender();
+        saveState();
+    }
+
+    function updateSelectedBarTitle(value) {
+        const bar = getSelectedBar();
+        if (!bar) return;
+
+        const fallbackTitle = `Line${String(getSelectedBarIndex() + 1).padStart(2, "0")}`;
+        const nextTitle = value.trim();
+        bar.title = nextTitle || fallbackTitle;
+        bar.customTitle = Boolean(nextTitle);
+        selectedLabel.textContent = bar.title;
+        updateBrandStatus(bar);
+        renderTaskList(bar);
         saveState();
     }
 
@@ -1073,6 +1166,10 @@
             saveState();
         });
 
+        barTitleInput.addEventListener("input", () => {
+            updateSelectedBarTitle(barTitleInput.value);
+        });
+
         barWidthInput.addEventListener("input", () => {
             updateSelectedBarSize("width", Number(barWidthInput.value));
         });
@@ -1086,7 +1183,9 @@
         });
 
         planTextInput.addEventListener("keydown", (event) => {
-            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            if (event.isComposing) return;
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
                 addTask();
             }
         });
