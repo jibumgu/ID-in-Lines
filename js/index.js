@@ -30,6 +30,7 @@
     const MAX_ZOOM = 3.4;
     const DEFAULT_COLOR = "#111111";
     const STORAGE_KEY = "id-in-lines-state-v1";
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     const state = {
         bars: [],
@@ -62,8 +63,10 @@
         didFit: false,
         renderRequested: true,
         progressAnimating: false,
+        reduceMotion: motionQuery.matches,
         idSeed: 0,
         toastTimer: null,
+        storageWarningShown: false,
     };
 
     function nextId(prefix) {
@@ -137,6 +140,10 @@
             window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
         } catch (error) {
             console.warn("ID-in-Lines could not save state.", error);
+            if (!state.storageWarningShown) {
+                state.storageWarningShown = true;
+                showToast("현재 브라우저에서 저장이 제한되었습니다.");
+            }
         }
     }
 
@@ -188,6 +195,10 @@
             return true;
         } catch (error) {
             console.warn("ID-in-Lines could not load state.", error);
+            if (!state.storageWarningShown) {
+                state.storageWarningShown = true;
+                showToast("저장된 데이터를 불러오지 못했습니다.");
+            }
             return false;
         }
     }
@@ -353,6 +364,8 @@
     function resizeCanvas() {
         const rect = canvas.getBoundingClientRect();
         const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+        const previousWidth = state.canvasSize.width;
+        const previousHeight = state.canvasSize.height;
 
         state.canvasSize.width = rect.width;
         state.canvasSize.height = rect.height;
@@ -360,7 +373,12 @@
         canvas.width = Math.round(rect.width * dpr);
         canvas.height = Math.round(rect.height * dpr);
 
-        if (!state.didFit && rect.width > 0 && rect.height > 0) {
+        const sizeChanged = previousWidth > 0 && previousHeight > 0;
+        const widthShift = sizeChanged ? Math.abs(rect.width - previousWidth) / previousWidth : 0;
+        const heightShift = sizeChanged ? Math.abs(rect.height - previousHeight) / previousHeight : 0;
+        const shouldRefit = !state.didFit || widthShift > 0.28 || heightShift > 0.28;
+
+        if (shouldRefit && rect.width > 0 && rect.height > 0) {
             fitView();
             state.didFit = true;
         }
@@ -405,7 +423,7 @@
         const gauge = getGaugeGeometry(bar);
         const fillHeight = gauge.height * progress;
         const waveBaseY = gauge.bottom - fillHeight;
-        const elapsed = performance.now() * 0.001;
+        const elapsed = state.reduceMotion ? 0 : performance.now() * 0.001;
         const amplitude = Math.min(7, Math.max(1.8, bar.width * 0.22)) / state.camera.zoom;
         const step = Math.max(1.2 / state.camera.zoom, bar.width / 18);
         const phase = elapsed * 1.55 + bar.x * 0.021;
@@ -438,7 +456,7 @@
         ctx.fill();
 
         ctx.restore();
-        return progress < 1 || progress > 0;
+        return !state.reduceMotion && (progress < 1 || progress > 0);
     }
 
     function drawBars() {
@@ -494,7 +512,7 @@
         if (!state.revealed) return;
 
         const bounds = getWorldBounds();
-        const now = performance.now();
+        const now = state.reduceMotion ? 0 : performance.now();
         const frame = {
             left: bounds.left + 24,
             top: bounds.top + 24,
@@ -638,12 +656,57 @@
     }
 
     function updateZoomLabel() {
-        resetViewBtn.textContent = `${Math.round(state.camera.zoom * 100)}%`;
+        const zoomPercent = `${Math.round(state.camera.zoom * 100)}%`;
+        resetViewBtn.textContent = zoomPercent;
+        resetViewBtn.setAttribute("aria-label", `보기 초기화, 현재 ${zoomPercent}`);
+    }
+
+    function handleCanvasKeydown(event) {
+        const panStep = event.shiftKey ? 72 : 32;
+        let handled = true;
+
+        switch (event.key) {
+            case "ArrowUp":
+                state.camera.y += panStep;
+                break;
+            case "ArrowDown":
+                state.camera.y -= panStep;
+                break;
+            case "ArrowLeft":
+                state.camera.x += panStep;
+                break;
+            case "ArrowRight":
+                state.camera.x -= panStep;
+                break;
+            case "+":
+            case "=":
+                zoomAt(state.canvasSize.width / 2, state.canvasSize.height / 2, 1.18);
+                break;
+            case "-":
+            case "_":
+                zoomAt(state.canvasSize.width / 2, state.canvasSize.height / 2, 0.84);
+                break;
+            case "0":
+            case "Home":
+                fitView();
+                break;
+            case "Escape":
+                selectHit(null);
+                break;
+            default:
+                handled = false;
+        }
+
+        if (!handled) return;
+
+        event.preventDefault();
+        requestRender();
     }
 
     function syncRevealState() {
         revealPanel.hidden = !state.revealed;
         revealBtn.classList.toggle("is-active", state.revealed);
+        revealBtn.setAttribute("aria-pressed", String(state.revealed));
         revealBtn.textContent = state.revealed ? "숨김" : "스캔";
     }
 
@@ -664,6 +727,7 @@
     function updateBrandStatus(bar) {
         if (!bar) {
             brandStatus.textContent = "ID-in-Lines";
+            brandStatus.setAttribute("aria-label", "ID-in-Lines 상태, 선택된 선 없음");
             brandStatus.style.color = "";
             brandStatus.style.borderColor = "";
             brandStatus.style.background = "";
@@ -673,9 +737,15 @@
         const totals = getTaskTotals(bar);
         const tone = pastelTone(bar.color);
         brandStatus.textContent = `${bar.title} · ${totals.doneCount}/${totals.totalCount}`;
+        brandStatus.setAttribute("aria-label", `${bar.title}, 완료한 계획 ${totals.doneCount}개, 전체 계획 ${totals.totalCount}개`);
         brandStatus.style.color = "#17191d";
         brandStatus.style.borderColor = tone.border;
         brandStatus.style.background = tone.background;
+    }
+
+    function updateRangeValueText() {
+        barWidthInput.setAttribute("aria-valuetext", `${barWidthInput.value}px`);
+        barHeightInput.setAttribute("aria-valuetext", `${barHeightInput.value}px`);
     }
 
     function renderPanel() {
@@ -700,11 +770,17 @@
 
         if (!bar) {
             selectedLabel.textContent = "--";
+            selectedLabel.setAttribute("aria-label", "선택된 선 없음");
             barTitleInput.value = "";
             barWidthInput.value = "12";
             barHeightInput.value = "260";
+            updateRangeValueText();
             barColorInput.value = DEFAULT_COLOR;
+            planTextInput.value = "";
+            autoResizeTextarea(planTextInput);
             planCount.textContent = "0/0";
+            planCount.setAttribute("aria-label", "완료한 계획 0개, 전체 계획 0개");
+            setTaskListMode(false);
             taskList.innerHTML = '<div class="empty-state">선을 먼저 선택하세요.</div>';
             updateBrandStatus(null);
             return;
@@ -712,9 +788,11 @@
 
         const barIndex = getSelectedBarIndex();
         selectedLabel.textContent = bar.title;
+        selectedLabel.setAttribute("aria-label", `선택된 선 ${bar.title}`);
         barTitleInput.value = bar.title;
         barWidthInput.value = String(bar.width);
         barHeightInput.value = String(bar.height);
+        updateRangeValueText();
         barColorInput.value = normalizeColor(bar.color);
         moveBarLeftBtn.disabled = barIndex <= 0;
         moveBarRightBtn.disabled = barIndex >= state.bars.length - 1;
@@ -726,13 +804,26 @@
     function updatePlanSummary(bar) {
         const totals = getTaskTotals(bar);
         planCount.textContent = `${totals.doneCount}/${totals.totalCount}`;
+        planCount.setAttribute("aria-label", `완료한 계획 ${totals.doneCount}개, 전체 계획 ${totals.totalCount}개`);
         updateBrandStatus(bar);
+    }
+
+    function setTaskListMode(hasTasks) {
+        if (hasTasks) {
+            taskList.setAttribute("role", "list");
+            taskList.setAttribute("aria-label", "계획 목록");
+            return;
+        }
+
+        taskList.setAttribute("role", "status");
+        taskList.setAttribute("aria-label", "계획 목록 상태");
     }
 
     function renderTaskList(bar) {
         taskList.innerHTML = "";
 
         if (bar.tasks.length === 0) {
+            setTaskListMode(false);
             const empty = document.createElement("div");
             empty.className = "empty-state";
             empty.textContent = "추가된 계획이 없습니다.";
@@ -740,11 +831,19 @@
             return;
         }
 
+        setTaskListMode(true);
         bar.tasks.forEach((task, index) => {
+            const taskOrderLabel = `No. ${String(index + 1).padStart(2, "0")}`;
+            const getTaskControlLabel = () => {
+                const compactText = task.text.replace(/\s+/g, " ").trim();
+                const taskTextLabel = compactText.length > 36 ? `${compactText.slice(0, 36)}...` : compactText;
+                return `${taskOrderLabel}, ${taskTextLabel || "빈 계획"}`;
+            };
             const item = document.createElement("div");
             item.className = "task-item";
             item.draggable = true;
             item.dataset.taskId = task.id;
+            item.setAttribute("role", "listitem");
             if (task.id === state.selectedTaskId) {
                 item.classList.add("is-selected");
             }
@@ -753,7 +852,6 @@
             checkbox.className = "task-check";
             checkbox.type = "checkbox";
             checkbox.checked = task.done;
-            checkbox.setAttribute("aria-label", "계획 완료");
 
             const body = document.createElement("div");
             body.className = "task-body";
@@ -767,28 +865,53 @@
 
             const order = document.createElement("span");
             order.className = "task-order";
-            order.textContent = `No. ${String(index + 1).padStart(2, "0")}`;
+            order.textContent = taskOrderLabel;
 
             const input = document.createElement("textarea");
             input.rows = 1;
             input.maxLength = 160;
             input.value = task.text;
             input.readOnly = true;
-            input.setAttribute("aria-label", "계획 수정");
+
+            const reorderControls = document.createElement("div");
+            reorderControls.className = "task-reorder";
+
+            const moveUpBtn = document.createElement("button");
+            moveUpBtn.className = "task-move-btn";
+            moveUpBtn.type = "button";
+            moveUpBtn.title = "위로 이동";
+            moveUpBtn.textContent = "▲";
+            moveUpBtn.disabled = index === 0;
+
+            const moveDownBtn = document.createElement("button");
+            moveDownBtn.className = "task-move-btn";
+            moveDownBtn.type = "button";
+            moveDownBtn.title = "아래로 이동";
+            moveDownBtn.textContent = "▼";
+            moveDownBtn.disabled = index === bar.tasks.length - 1;
 
             const editBtn = document.createElement("button");
             editBtn.className = "edit-btn";
             editBtn.type = "button";
             editBtn.title = "계획 수정";
-            editBtn.setAttribute("aria-label", "계획 수정");
             editBtn.textContent = "수정";
 
             const deleteBtn = document.createElement("button");
             deleteBtn.className = "mini-btn";
             deleteBtn.type = "button";
             deleteBtn.title = "계획 삭제";
-            deleteBtn.setAttribute("aria-label", "계획 삭제");
             deleteBtn.textContent = "×";
+
+            const syncTaskControlLabels = () => {
+                const taskControlLabel = getTaskControlLabel();
+                checkbox.setAttribute("aria-label", `${taskControlLabel} 완료 여부`);
+                input.setAttribute("aria-label", `${taskControlLabel} 내용`);
+                moveUpBtn.setAttribute("aria-label", `${taskControlLabel} 위로 이동`);
+                moveDownBtn.setAttribute("aria-label", `${taskControlLabel} 아래로 이동`);
+                editBtn.setAttribute("aria-label", `${taskControlLabel} 수정`);
+                deleteBtn.setAttribute("aria-label", `${taskControlLabel} 삭제`);
+            };
+            syncTaskControlLabels();
 
             checkbox.addEventListener("change", () => {
                 task.done = checkbox.checked;
@@ -814,6 +937,7 @@
             input.addEventListener("input", () => {
                 task.text = input.value;
                 autoResizeTextarea(input);
+                syncTaskControlLabels();
                 updatePlanSummary(bar);
                 requestRender();
                 saveState();
@@ -827,6 +951,14 @@
                     editBtn.textContent = "수정";
                     input.blur();
                 }
+            });
+
+            moveUpBtn.addEventListener("click", () => {
+                moveTaskByOffset(bar, task.id, -1);
+            });
+
+            moveDownBtn.addEventListener("click", () => {
+                moveTaskByOffset(bar, task.id, 1);
             });
 
             editBtn.addEventListener("click", () => {
@@ -896,7 +1028,8 @@
 
             meta.append(lineBadge, order);
             body.append(meta, input);
-            item.append(checkbox, body, editBtn, deleteBtn);
+            reorderControls.append(moveUpBtn, moveDownBtn);
+            item.append(checkbox, body, reorderControls, editBtn, deleteBtn);
             taskList.appendChild(item);
             autoResizeTextarea(input);
         });
@@ -996,11 +1129,16 @@
             text,
             done: false,
         };
+        const shouldRefocusPlanInput = document.activeElement === planTextInput || document.activeElement === addTaskBtn;
 
         bar.tasks.push(task);
         state.selectedTaskId = task.id;
         planTextInput.value = "";
+        autoResizeTextarea(planTextInput);
         renderPanel();
+        if (shouldRefocusPlanInput) {
+            planTextInput.focus();
+        }
         requestRender();
         saveState();
     }
@@ -1030,6 +1168,21 @@
         const [draggedTask] = bar.tasks.splice(fromIndex, 1);
         bar.tasks.splice(toIndex, 0, draggedTask);
         state.selectedTaskId = draggedTask.id;
+        renderTaskList(bar);
+        requestRender();
+        saveState();
+    }
+
+    function moveTaskByOffset(bar, taskId, offset) {
+        if (!bar || !taskId || offset === 0) return;
+
+        const fromIndex = bar.tasks.findIndex((task) => task.id === taskId);
+        const toIndex = fromIndex + offset;
+        if (fromIndex < 0 || toIndex < 0 || toIndex >= bar.tasks.length) return;
+
+        const [task] = bar.tasks.splice(fromIndex, 1);
+        bar.tasks.splice(toIndex, 0, task);
+        state.selectedTaskId = task.id;
         renderTaskList(bar);
         requestRender();
         saveState();
@@ -1066,6 +1219,7 @@
         bar.title = nextTitle || fallbackTitle;
         bar.customTitle = Boolean(nextTitle);
         selectedLabel.textContent = bar.title;
+        selectedLabel.setAttribute("aria-label", `선택된 선 ${bar.title}`);
         updateBrandStatus(bar);
         renderTaskList(bar);
         saveState();
@@ -1073,6 +1227,10 @@
 
     function bindEvents() {
         window.addEventListener("resize", resizeCanvas);
+        motionQuery.addEventListener("change", (event) => {
+            state.reduceMotion = event.matches;
+            requestRender();
+        });
 
         canvas.addEventListener("pointerenter", (event) => {
             updateMousePoint(event);
@@ -1141,6 +1299,8 @@
             zoomAt(point.x, point.y, factor);
         }, { passive: false });
 
+        canvas.addEventListener("keydown", handleCanvasKeydown);
+
         zoomOutBtn.addEventListener("click", () => {
             const anchor = getZoomAnchor();
             zoomAt(anchor.x, anchor.y, 0.84);
@@ -1171,10 +1331,12 @@
         });
 
         barWidthInput.addEventListener("input", () => {
+            updateRangeValueText();
             updateSelectedBarSize("width", Number(barWidthInput.value));
         });
 
         barHeightInput.addEventListener("input", () => {
+            updateRangeValueText();
             updateSelectedBarSize("height", Number(barHeightInput.value));
         });
 
@@ -1189,10 +1351,15 @@
                 addTask();
             }
         });
+
+        planTextInput.addEventListener("input", () => {
+            autoResizeTextarea(planTextInput);
+        });
     }
 
     function animationLoop() {
-        if (state.renderRequested || state.revealed || state.progressAnimating) {
+        const revealIsAnimating = state.revealed && !state.reduceMotion;
+        if (state.renderRequested || revealIsAnimating || state.progressAnimating) {
             state.progressAnimating = render();
             state.renderRequested = false;
         }

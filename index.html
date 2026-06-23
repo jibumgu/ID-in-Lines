@@ -3,16 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="정해진 선과 계획을 바코드처럼 쌓아 나만의 ID를 만드는 인터랙티브 웹입니다.">
+    <meta name="application-name" content="ID-in-Lines">
+    <meta name="theme-color" content="#f4f6f8">
+    <meta name="apple-mobile-web-app-title" content="ID-in-Lines">
     <title>ID-in-Lines</title>
     <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
     <main class="app">
-        <section class="stage" aria-label="ID-in-Lines canvas">
-            <canvas id="lineCanvas"></canvas>
+        <section class="stage" aria-label="ID-in-Lines 작업 화면">
+            <canvas
+                id="lineCanvas"
+                tabindex="0"
+                role="application"
+                aria-label="ID-in-Lines 작업 영역"
+                aria-describedby="canvasHelp"
+                aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 Home Escape"
+            ></canvas>
+            <p id="canvasHelp" class="sr-only">방향키로 화면을 이동하고, 더하기와 빼기로 확대 또는 축소합니다. 0 또는 Home은 보기 초기화, Escape는 선택 해제입니다.</p>
 
             <div class="hud" aria-hidden="false">
-                <div id="brandStatus" class="brand">ID-in-Lines</div>
+                <div id="brandStatus" class="brand" role="status" aria-live="polite" aria-label="ID-in-Lines 상태">ID-in-Lines</div>
                 <div class="view-controls">
                     <button id="zoomOutBtn" type="button" title="축소" aria-label="축소">-</button>
                     <button id="resetViewBtn" type="button" title="보기 초기화" aria-label="보기 초기화">100%</button>
@@ -23,7 +35,7 @@
             <div id="toast" class="toast" role="status" aria-live="polite"></div>
         </section>
 
-        <aside class="panel" aria-label="line controls">
+        <aside class="panel" aria-label="라인과 계획 설정">
             <header class="panel-header">
                 <p class="eyebrow">Plan Code</p>
                 <h1>ID-in-Lines</h1>
@@ -31,13 +43,13 @@
 
             <div class="action-row">
                 <button id="addBarBtn" class="primary-btn" type="button">선 추가</button>
-                <button id="revealBtn" class="ghost-btn" type="button">스캔</button>
+                <button id="revealBtn" class="ghost-btn" type="button" aria-pressed="false" aria-controls="revealPanel">스캔</button>
             </div>
 
             <section class="control-block">
                 <div class="block-title">
                     <h2>선택한 선</h2>
-                    <span id="selectedLabel">--</span>
+                    <span id="selectedLabel" aria-label="선택된 선 없음">--</span>
                 </div>
 
                 <label class="field">
@@ -74,7 +86,7 @@
             <section class="control-block">
                 <div class="block-title">
                     <h2>계획 추가</h2>
-                    <span id="planCount">0/0</span>
+                    <span id="planCount" role="status" aria-live="polite" aria-label="완료한 계획 0개, 전체 계획 0개">0/0</span>
                 </div>
 
                 <label class="field">
@@ -83,7 +95,7 @@
                 </label>
 
                 <button id="addTaskBtn" class="primary-btn" type="button">계획 추가</button>
-                <div id="taskList" class="task-list" aria-live="polite"></div>
+                <div id="taskList" class="task-list" role="status" aria-live="polite" aria-label="계획 목록 상태"></div>
             </section>
 
             <section id="revealPanel" class="reveal-panel" hidden>
