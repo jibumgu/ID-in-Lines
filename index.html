@@ -1,36 +1,99 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>ID-in-Lines</title>
     <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
-    <div class="background">
-        <div class="card1"></div>
-        <div class="card2"></div>
-        <div class="card3"></div>
-        <div class="card4"></div>
-        <div class="card5">
-            <div class="click">CLICK!</div>
-        </div>
-        <div class="background-after">
-            <div class="cancel">❌</div>
-            <div class="bgAfter">
-                <div class="background-after-in">
-                    <div class="card1-diff"></div>
-                    <div class="card2-diff"></div>
-                    <div class="card3-diff"></div>
-                    <div class="card4-diff"></div>
-                    <div class="card5-diff"></div>
-                    <div class="left">⬅️</div>
-                    <div class="right">➡️</div>
+    <main class="app">
+        <section class="stage" aria-label="ID-in-Lines canvas">
+            <canvas id="lineCanvas"></canvas>
+
+            <div class="hud" aria-hidden="false">
+                <div id="brandStatus" class="brand">ID-in-Lines</div>
+                <div class="view-controls">
+                    <button id="zoomOutBtn" type="button" title="축소" aria-label="축소">-</button>
+                    <button id="resetViewBtn" type="button" title="보기 초기화" aria-label="보기 초기화">100%</button>
+                    <button id="zoomInBtn" type="button" title="확대" aria-label="확대">+</button>
                 </div>
             </div>
-        </div>
-    </div>
-    
+
+            <div id="toast" class="toast" role="status" aria-live="polite"></div>
+        </section>
+
+        <aside class="panel" aria-label="line controls">
+            <header class="panel-header">
+                <p class="eyebrow">Plan Code</p>
+                <h1>ID-in-Lines</h1>
+            </header>
+
+            <div class="action-row">
+                <button id="addBarBtn" class="primary-btn" type="button">선 추가</button>
+                <button id="revealBtn" class="ghost-btn" type="button">스캔</button>
+            </div>
+
+            <section class="control-block">
+                <div class="block-title">
+                    <h2>선택한 선</h2>
+                    <span id="selectedLabel">--</span>
+                </div>
+
+                <label class="field">
+                    <span>라인명</span>
+                    <input id="barTitleInput" type="text" readonly autocomplete="off">
+                </label>
+
+                <div class="move-row" aria-label="선 위치 변경">
+                    <button id="moveBarLeftBtn" class="ghost-btn" type="button">이전</button>
+                    <button id="moveBarRightBtn" class="ghost-btn" type="button">다음</button>
+                </div>
+
+                <label class="field">
+                    <span>굵기</span>
+                    <input id="barWidthInput" type="range" min="4" max="34" step="1">
+                </label>
+
+                <label class="field">
+                    <span>높이</span>
+                    <input id="barHeightInput" type="range" min="160" max="460" step="10">
+                </label>
+
+                <label class="field field-color">
+                    <span>색상</span>
+                    <input id="barColorInput" type="color" aria-label="선 색상">
+                </label>
+
+                <div class="bar-action-row">
+                    <button id="resetBarBtn" class="ghost-btn" type="button">선 초기화</button>
+                    <button id="deleteBarBtn" class="danger-btn" type="button">선 삭제</button>
+                </div>
+            </section>
+
+            <section class="control-block">
+                <div class="block-title">
+                    <h2>계획 추가</h2>
+                    <span id="planCount">0/0</span>
+                </div>
+
+                <label class="field">
+                    <span>내용</span>
+                    <textarea id="planTextInput" rows="3" maxlength="80" placeholder="계획을 입력하세요"></textarea>
+                </label>
+
+                <button id="addTaskBtn" class="primary-btn" type="button">계획 추가</button>
+                <div id="taskList" class="task-list" aria-live="polite"></div>
+            </section>
+
+            <section id="revealPanel" class="reveal-panel" hidden>
+                <p class="eyebrow">Revealed ID</p>
+                <h2>My Barcode ID</h2>
+                <p>정해진 선과 계획들이 모여 나만의 값을 만듭니다.</p>
+            </section>
+        </aside>
+    </main>
+
     <script src="./js/index.js"></script>
 </body>
 </html>
